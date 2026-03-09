@@ -1,20 +1,43 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Household Dashboard MVP
 
-# Run and deploy your AI Studio app
+This repository now contains a spec-aligned MVP scaffold for the household dashboard:
 
-This contains everything you need to run your app locally.
+- `backend/`: Rust + Axum API with JWT auth, 2FA enrollment/challenge routes, household membership, tasks, shopping lists, dashboard aggregation, WebSocket fan-out, and PostgreSQL migrations.
+- `frontend/`: React + Vite + TypeScript client with Zustand stores, authenticated flows, household setup, dashboard, tasks, shopping, and WebSocket event ingestion.
 
-View your app in AI Studio: https://ai.studio/apps/9eb347f9-d5d9-401d-b1f9-5d0c02bca5dd
+The previous root-level prototype is intentionally left untouched for reference, but the new implementation lives in the dedicated `backend/` and `frontend/` workspaces.
 
-## Run Locally
+## Run locally
 
-**Prerequisites:**  Node.js
+Prerequisites:
 
+- Rust 1.93+
+- Node.js 24+
+- PostgreSQL
+- Redis
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Copy `.env.example` into your shell environment or an env loader of your choice.
+2. Apply `backend/migrations/0001_mvp.sql` to your PostgreSQL database.
+3. Start the backend:
+   `cargo run --manifest-path backend/Cargo.toml`
+4. Start the frontend:
+   `npm install --prefix frontend`
+   `npm run dev:frontend`
+
+## Validation
+
+- Backend compile check:
+  `cargo check --manifest-path backend/Cargo.toml`
+- Frontend type/build check:
+  `npm run build --prefix frontend`
+- Combined check:
+  `npm run check`
+
+## MVP Scope Implemented
+
+- Auth scaffold with register, login, refresh, logout, TOTP setup/verify/challenge, and backup-code recovery routes
+- Household creation, invite token join, and member listing
+- Task CRUD/complete/assign endpoints with WebSocket event publish
+- Shopping list and item flows with WebSocket event publish
+- Aggregated dashboard endpoint for tasks and shopping summaries
+- React client flows for auth, household bootstrap, dashboard, tasks, and shopping
