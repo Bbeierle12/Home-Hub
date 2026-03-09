@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { CalendarDays, CheckCircle2, ShoppingCart } from "lucide-react";
+import { CalendarDays, CheckCircle2, Landmark, ShoppingCart } from "lucide-react";
 import { Panel } from "../../components/Panel";
 import { useAuthStore } from "../../stores/auth";
 import { useDashboardStore } from "../../stores/dashboard";
@@ -82,6 +82,30 @@ export function DashboardPage() {
           </div>
         </Panel>
       </div>
+
+      {data?.bills_due_soon ? (
+        <Panel title="Bills Due Soon" eyebrow="Finance">
+          <div className="grid gap-3 md:grid-cols-3">
+            {data.bills_due_soon.length ? (
+              data.bills_due_soon.map((bill) => (
+                <div key={bill.id} className="rounded-2xl border border-[color:var(--color-border)] bg-white p-4">
+                  <div className="flex items-center gap-3">
+                    <Landmark className="size-4 text-[color:var(--color-secondary)]" />
+                    <p className="font-semibold">{bill.name}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-[color:var(--color-muted)]">
+                    Due {bill.next_due_at ? new Date(bill.next_due_at).toLocaleDateString() : "unscheduled"}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl bg-white/80 p-4 text-sm text-[color:var(--color-muted)]">
+                No bills due in the next 7 days.
+              </div>
+            )}
+          </div>
+        </Panel>
+      ) : null}
 
       <Panel title="MVP Status" eyebrow="Scope">
         <div className="grid gap-4 md:grid-cols-3">

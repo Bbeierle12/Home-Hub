@@ -3,7 +3,7 @@
 This repository now contains a spec-aligned MVP scaffold for the household dashboard:
 
 - `backend/`: Rust + Axum API with JWT auth, 2FA enrollment/challenge routes, household membership, tasks, shopping lists, dashboard aggregation, WebSocket fan-out, and PostgreSQL migrations.
-- `frontend/`: React + Vite + TypeScript client with Zustand stores, authenticated flows, household setup, dashboard, tasks, shopping, and WebSocket event ingestion.
+- `frontend/`: React + Vite + TypeScript client with Zustand stores, authenticated flows, household setup, dashboard, tasks, shopping, finance, and WebSocket event ingestion.
 
 The previous root-level prototype is intentionally left untouched for reference, but the new implementation lives in the dedicated `backend/` and `frontend/` workspaces.
 
@@ -41,3 +41,10 @@ Prerequisites:
 - Shopping list and item flows with WebSocket event publish
 - Aggregated dashboard endpoint for tasks and shopping summaries
 - React client flows for auth, household bootstrap, dashboard, tasks, and shopping
+
+## Finance Slice In Progress
+
+- Household-level finance access settings with configurable member access
+- Bills, bill payments, budget categories, expenses, subscriptions, and finance summary routes
+- Finance dashboard visibility gated by role and finance settings
+- Initial finance page with summary, bill creation, category creation, and subscription audit

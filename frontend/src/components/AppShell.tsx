@@ -1,4 +1,4 @@
-import { Home, ListChecks, LogOut, ShoppingBasket } from "lucide-react";
+import { Home, Landmark, ListChecks, LogOut, ShoppingBasket } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../stores/auth";
 
@@ -6,11 +6,15 @@ const navigation = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/shopping", label: "Shopping", icon: ShoppingBasket },
+  { to: "/finance", label: "Finance", icon: Landmark },
 ];
 
 export function AppShell() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const visibleNavigation = navigation.filter((item) =>
+    item.to === "/finance" ? user?.role === "admin" || user?.role === "member" : true,
+  );
 
   return (
     <div className="min-h-screen px-4 py-6 md:px-6">
@@ -29,7 +33,7 @@ export function AppShell() {
           </div>
 
           <nav className="mt-8 space-y-2">
-            {navigation.map(({ to, label, icon: Icon }) => (
+            {visibleNavigation.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}

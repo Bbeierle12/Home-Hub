@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { AuthPage } from "../pages/auth/AuthPage";
 import { DashboardPage } from "../pages/dashboard/DashboardPage";
+import { FinancePage } from "../pages/finance/FinancePage";
 import { HouseholdPage } from "../pages/household/HouseholdPage";
 import { ShoppingPage } from "../pages/shopping/ShoppingPage";
 import { TasksPage } from "../pages/tasks/TasksPage";
@@ -49,6 +50,7 @@ export function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/shopping" element={<ShoppingPage />} />
+        <Route path="/finance" element={<FinancePage />} />
       </Route>
     </Routes>
   );
