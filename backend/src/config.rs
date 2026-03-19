@@ -4,6 +4,21 @@ use chrono::Duration;
 
 use crate::error::ApiError;
 
+/// Which database engine Home-Hub is running against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbBackend {
+    /// Standard PostgreSQL (default).
+    Postgres,
+    /// Rust-DB via pgwire compatibility layer.
+    RustDb,
+}
+
+impl DbBackend {
+    pub fn is_rustdb(self) -> bool {
+        matches!(self, Self::RustDb)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub app_host: String,
@@ -16,10 +31,21 @@ pub struct AppConfig {
     pub jwt_refresh_expiry_seconds: i64,
     pub device_trust_ttl_seconds: usize,
     pub totp_issuer: String,
+    pub db_backend: DbBackend,
 }
 
 impl AppConfig {
     pub fn from_env() -> Result<Arc<Self>, ApiError> {
+        let db_backend = match read_env("DB_BACKEND", "postgres").to_lowercase().as_str() {
+            "postgres" | "pg" => DbBackend::Postgres,
+            "rustdb" | "rust-db" | "rust_db" => DbBackend::RustDb,
+            other => {
+                return Err(ApiError::config(format!(
+                    "DB_BACKEND must be 'postgres' or 'rustdb', got '{other}'"
+                )));
+            }
+        };
+
         Ok(Arc::new(Self {
             app_host: read_env("APP_HOST", "0.0.0.0"),
             app_port: read_env("APP_PORT", "8080")
@@ -39,6 +65,7 @@ impl AppConfig {
                 .parse()
                 .map_err(|_| ApiError::config("DEVICE_TRUST_TTL_SECONDS must be an integer"))?,
             totp_issuer: read_env("TOTP_ISSUER", "HouseholdDashboard"),
+            db_backend,
         }))
     }
 

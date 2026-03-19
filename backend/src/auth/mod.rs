@@ -127,41 +127,59 @@ async fn register(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<Json<AuthenticatedUser>, ApiError> {
+    use crate::compat;
+
     if request.password.len() < 12 {
         return Err(ApiError::bad_request(
             "Password must be at least 12 characters for this scaffold",
         ));
     }
 
+    let email = request.email.trim().to_lowercase();
+
+    // Pre-check for duplicate email (works on any backend).
+    let existing = sqlx::query("SELECT id FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(&state.db)
+        .await?;
+    if existing.is_some() {
+        return Err(ApiError::conflict("Email address is already registered"));
+    }
+
     let password_hash = hash_password(&request.password)?;
-    let user_id = Uuid::new_v4();
+    let user_id = compat::new_id();
+    let now = compat::now_utc();
 
     let insert = sqlx::query(
         r#"
-        INSERT INTO users (id, email, password_hash, display_name)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO users (id, email, password_hash, display_name, totp_enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, FALSE, $5, $6)
         "#,
     )
     .bind(user_id)
-    .bind(request.email.trim().to_lowercase())
+    .bind(&email)
     .bind(password_hash)
     .bind(request.display_name.trim())
+    .bind(now)
+    .bind(now)
     .execute(&state.db)
     .await;
 
     if let Err(error) = insert {
+        // Race-condition fallback: another request may have inserted between
+        // our SELECT and INSERT.  PostgreSQL surfaces this as a unique
+        // violation; Rust-DB may surface a generic error.
         if let sqlx::Error::Database(database_error) = &error {
             if database_error.is_unique_violation() {
                 return Err(ApiError::conflict("Email address is already registered"));
             }
         }
-
         return Err(ApiError::from(error));
     }
 
     Ok(Json(AuthenticatedUser {
         id: user_id,
-        email: request.email.trim().to_lowercase(),
+        email,
         display_name: request.display_name.trim().to_owned(),
         household_id: None,
         role: None,
@@ -287,12 +305,13 @@ async fn two_factor_verify_setup(
     sqlx::query(
         r#"
         UPDATE users
-        SET totp_secret = $2, totp_enabled = TRUE, updated_at = NOW()
+        SET totp_secret = $2, totp_enabled = TRUE, updated_at = $3
         WHERE id = $1
         "#,
     )
     .bind(current_user.user_id)
     .bind(secret)
+    .bind(crate::compat::now_utc())
     .execute(&state.db)
     .await?;
 
@@ -336,11 +355,12 @@ async fn two_factor_disable(
     sqlx::query(
         r#"
         UPDATE users
-        SET totp_enabled = FALSE, totp_secret = NULL, updated_at = NOW()
+        SET totp_enabled = FALSE, totp_secret = NULL, updated_at = $2
         WHERE id = $1
         "#,
     )
     .bind(current_user.user_id)
+    .bind(crate::compat::now_utc())
     .execute(&state.db)
     .await?;
 
@@ -376,8 +396,9 @@ async fn two_factor_recover(
         .find(|backup_code| verify_password(&backup_code.code_hash, &request.backup_code).is_ok())
         .ok_or_else(|| ApiError::unauthorized("Backup code is invalid"))?;
 
-    sqlx::query("UPDATE totp_backup_codes SET used_at = NOW() WHERE id = $1")
+    sqlx::query("UPDATE totp_backup_codes SET used_at = $2 WHERE id = $1")
         .bind(matching_code.id)
+        .bind(crate::compat::now_utc())
         .execute(&state.db)
         .await?;
 

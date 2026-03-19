@@ -53,6 +53,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 403) {
         set({ isLocked: true, error: null });
+      } else if (caught instanceof ApiError && caught.status === 501) {
+        set({ isLocked: true, error: null });
       } else {
         set({ error: caught instanceof Error ? caught.message : "Finance request failed" });
       }

@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Home, Landmark, ListChecks, LogOut, ShoppingBasket } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../stores/auth";
+import { useCapabilitiesStore } from "../stores/capabilities";
 
 const navigation = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
@@ -12,9 +14,20 @@ const navigation = [
 export function AppShell() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-  const visibleNavigation = navigation.filter((item) =>
-    item.to === "/finance" ? user?.role === "admin" || user?.role === "member" : true,
-  );
+  const financeEnabled = useCapabilitiesStore((state) => state.financeEnabled);
+  const fetchCapabilities = useCapabilitiesStore((state) => state.fetchCapabilities);
+
+  useEffect(() => {
+    void fetchCapabilities();
+  }, [fetchCapabilities]);
+
+  const visibleNavigation = navigation.filter((item) => {
+    if (item.to === "/finance") {
+      if (!financeEnabled) return false;
+      return user?.role === "admin" || user?.role === "member";
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen px-4 py-6 md:px-6">

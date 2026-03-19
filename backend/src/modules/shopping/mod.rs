@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::{require_household_access, require_shared_write, CurrentUser},
+    compat,
     error::ApiError,
     AppState,
 };
@@ -128,18 +129,32 @@ async fn create_list(
 ) -> Result<Json<ShoppingListDetailResponse>, ApiError> {
     require_shared_write(&state, &current_user, household_id).await?;
 
-    let list = sqlx::query_as::<_, ShoppingListRecord>(
+    let list_id = compat::new_id();
+    let now = compat::now_utc();
+
+    sqlx::query(
         r#"
-        INSERT INTO shopping_lists (id, household_id, name, store, created_by)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, household_id, name, store, created_by, archived_at, created_at
+        INSERT INTO shopping_lists (id, household_id, name, store, created_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
         "#,
     )
-    .bind(Uuid::new_v4())
+    .bind(list_id)
     .bind(household_id)
     .bind(request.name.trim())
     .bind(request.store)
     .bind(current_user.user_id)
+    .bind(now)
+    .execute(&state.db)
+    .await?;
+
+    let list = sqlx::query_as::<_, ShoppingListRecord>(
+        r#"
+        SELECT id, household_id, name, store, created_by, archived_at, created_at
+        FROM shopping_lists
+        WHERE id = $1
+        "#,
+    )
+    .bind(list_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -193,38 +208,111 @@ async fn create_item(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_shared_write(&state, &current_user, household_id).await?;
 
-    let item = sqlx::query_as::<_, ShoppingItemRecord>(
-        r#"
-        INSERT INTO shopping_items (id, list_id, added_by, name, quantity, unit, category)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, list_id, added_by, name, quantity, unit, category, checked,
-                  checked_by, checked_at, sort_order, created_at
-        "#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(list_id)
-    .bind(current_user.user_id)
-    .bind(request.name.trim())
-    .bind(request.quantity)
-    .bind(request.unit)
-    .bind(request.category.clone())
-    .fetch_one(&state.db)
-    .await?;
+    let item_id = compat::new_id();
+    let now = compat::now_utc();
+    let item_name = request.name.trim().to_owned();
 
     sqlx::query(
         r#"
-        INSERT INTO shopping_item_history (id, household_id, name, category, last_bought_at, buy_count)
-        VALUES ($1, $2, $3, $4, NOW(), 1)
-        ON CONFLICT (household_id, name)
-        DO UPDATE SET category = EXCLUDED.category, last_bought_at = NOW(), buy_count = shopping_item_history.buy_count + 1
+        INSERT INTO shopping_items (id, list_id, added_by, name, quantity, unit, category, checked, sort_order, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, 0, $8)
         "#,
     )
-    .bind(Uuid::new_v4())
-    .bind(household_id)
-    .bind(&item.name)
-    .bind(item.category.clone())
+    .bind(item_id)
+    .bind(list_id)
+    .bind(current_user.user_id)
+    .bind(&item_name)
+    .bind(request.quantity)
+    .bind(&request.unit)
+    .bind(&request.category)
+    .bind(now)
     .execute(&state.db)
     .await?;
+
+    let item = sqlx::query_as::<_, ShoppingItemRecord>(
+        r#"
+        SELECT id, list_id, added_by, name, quantity, unit, category, checked,
+               checked_by, checked_at, sort_order, created_at
+        FROM shopping_items
+        WHERE id = $1
+        "#,
+    )
+    .bind(item_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    // Upsert shopping_item_history: check-then-insert/update replaces ON CONFLICT.
+    // Race-condition handling: if the INSERT fails because a concurrent request
+    // created the row between our SELECT and INSERT, we fall back to UPDATE.
+    let existing_history = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM shopping_item_history WHERE household_id = $1 AND name = $2",
+    )
+    .bind(household_id)
+    .bind(&item_name)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if let Some(history_id) = existing_history {
+        sqlx::query(
+            r#"
+            UPDATE shopping_item_history
+            SET category = $2, last_bought_at = $3, buy_count = buy_count + 1
+            WHERE id = $1
+            "#,
+        )
+        .bind(history_id)
+        .bind(&request.category)
+        .bind(now)
+        .execute(&state.db)
+        .await?;
+    } else {
+        let insert = sqlx::query(
+            r#"
+            INSERT INTO shopping_item_history (id, household_id, name, category, last_bought_at, buy_count)
+            VALUES ($1, $2, $3, $4, $5, 1)
+            "#,
+        )
+        .bind(compat::new_id())
+        .bind(household_id)
+        .bind(&item_name)
+        .bind(&request.category)
+        .bind(now)
+        .execute(&state.db)
+        .await;
+
+        if let Err(error) = insert {
+            // Race: another request created the history row first.
+            // Fall back to UPDATE instead of failing.
+            if let sqlx::Error::Database(ref db_err) = error {
+                if db_err.is_unique_violation() {
+                    let fallback_id = sqlx::query_scalar::<_, Uuid>(
+                        "SELECT id FROM shopping_item_history WHERE household_id = $1 AND name = $2",
+                    )
+                    .bind(household_id)
+                    .bind(&item_name)
+                    .fetch_one(&state.db)
+                    .await?;
+
+                    sqlx::query(
+                        r#"
+                        UPDATE shopping_item_history
+                        SET category = $2, last_bought_at = $3, buy_count = buy_count + 1
+                        WHERE id = $1
+                        "#,
+                    )
+                    .bind(fallback_id)
+                    .bind(&request.category)
+                    .bind(now)
+                    .execute(&state.db)
+                    .await?;
+                } else {
+                    return Err(ApiError::from(error));
+                }
+            } else {
+                return Err(ApiError::from(error));
+            }
+        }
+    }
 
     publish_shopping_event(&state, "shopping_item.added", household_id, current_user.user_id, &item).await?;
     Ok(Json(serde_json::json!({ "item": item })))
@@ -249,7 +337,7 @@ async fn update_item(
         None
     };
 
-    let item = sqlx::query_as::<_, ShoppingItemRecord>(
+    let result = sqlx::query(
         r#"
         UPDATE shopping_items
         SET checked = COALESCE($4, checked),
@@ -260,8 +348,6 @@ async fn update_item(
             category = COALESCE($9, category),
             name = COALESCE($10, name)
         WHERE list_id = $1 AND id = $2
-        RETURNING id, list_id, added_by, name, quantity, unit, category, checked,
-                  checked_by, checked_at, sort_order, created_at
         "#,
     )
     .bind(list_id)
@@ -274,9 +360,24 @@ async fn update_item(
     .bind(request.unit)
     .bind(request.category)
     .bind(request.name.map(|value| value.trim().to_owned()))
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| ApiError::not_found("Shopping item not found"))?;
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("Shopping item not found"));
+    }
+
+    let item = sqlx::query_as::<_, ShoppingItemRecord>(
+        r#"
+        SELECT id, list_id, added_by, name, quantity, unit, category, checked,
+               checked_by, checked_at, sort_order, created_at
+        FROM shopping_items
+        WHERE id = $1
+        "#,
+    )
+    .bind(item_id)
+    .fetch_one(&state.db)
+    .await?;
 
     let event_type = if item.checked {
         "shopping_item.checked"

@@ -1,4 +1,5 @@
 mod auth;
+mod compat;
 mod config;
 mod db;
 mod error;
@@ -35,6 +36,8 @@ async fn main() -> Result<(), ApiError> {
         .init();
 
     let config = AppConfig::from_env()?;
+    tracing::info!(db_backend = ?config.db_backend, "Database backend mode");
+
     let db = db::connect(&config).await?;
     let redis = RedisClient::open(config.redis_url.clone())
         .map_err(|error| ApiError::config(format!("Invalid REDIS_URL: {error}")))?;
@@ -49,7 +52,7 @@ async fn main() -> Result<(), ApiError> {
     let app = Router::new()
         .route("/health", get(health))
         .nest("/auth", auth::router())
-        .nest("/households", modules::router())
+        .nest("/households", modules::router(config.db_backend))
         .route("/ws", get(ws::handler::ws_handler))
         .layer(
             CorsLayer::new()
@@ -71,6 +74,12 @@ async fn main() -> Result<(), ApiError> {
         .map_err(|error| ApiError::internal(format!("Server failed: {error}")))
 }
 
-async fn health() -> &'static str {
-    "ok"
+async fn health(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({
+        "status": "ok",
+        "db_backend": if state.config.db_backend.is_rustdb() { "rustdb" } else { "postgres" },
+    }))
 }
+

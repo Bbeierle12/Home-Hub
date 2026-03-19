@@ -5,13 +5,14 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveTime, Utc};
 use serde::Serialize;
 use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
     auth::middleware::{require_household_access, CurrentUser},
+    config::DbBackend,
     error::ApiError,
     AppState,
 };
@@ -59,7 +60,12 @@ async fn get_dashboard(
     let membership = require_household_access(&state, &current_user, household_id).await?;
 
     let today = Utc::now().date_naive();
+    // End-of-day timestamp replaces the PostgreSQL `due_at::date <= $3` cast.
+    let end_of_today = today
+        .and_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap())
+        .and_utc();
 
+    // CASE WHEN replaces `NULLS LAST`; timestamp comparison replaces `::date`.
     let my_tasks = sqlx::query_as::<_, TaskCard>(
         r#"
         SELECT id, title, due_at, completed_at
@@ -67,24 +73,26 @@ async fn get_dashboard(
         WHERE household_id = $1
           AND (assigned_to = $2 OR assigned_to IS NULL)
           AND completed_at IS NULL
-          AND (due_at IS NULL OR due_at::date <= $3)
-        ORDER BY due_at ASC NULLS LAST, created_at ASC
+          AND (due_at IS NULL OR due_at <= $3)
+        ORDER BY CASE WHEN due_at IS NULL THEN 1 ELSE 0 END ASC, due_at ASC
         LIMIT 8
         "#,
     )
     .bind(household_id)
     .bind(current_user.user_id)
-    .bind(today)
+    .bind(end_of_today)
     .fetch_all(&state.db)
     .await?;
 
+    // SUM(CASE …) replaces the PostgreSQL-specific `FILTER (WHERE …)` clause.
     let shopping_lists = sqlx::query_as::<_, ShoppingSummaryRow>(
         r#"
-        SELECT sl.id, sl.name, COUNT(si.*) FILTER (WHERE si.checked = FALSE) AS open_items
+        SELECT sl.id, sl.name,
+               COALESCE(SUM(CASE WHEN si.id IS NOT NULL AND si.checked = FALSE THEN 1 ELSE 0 END), 0) AS open_items
         FROM shopping_lists sl
         LEFT JOIN shopping_items si ON si.list_id = sl.id
         WHERE sl.household_id = $1 AND sl.archived_at IS NULL
-        GROUP BY sl.id, sl.name
+        GROUP BY sl.id, sl.name, sl.created_at
         ORDER BY sl.created_at DESC
         LIMIT 5
         "#,
@@ -93,27 +101,32 @@ async fn get_dashboard(
     .fetch_all(&state.db)
     .await?;
 
-    let bills_due_soon = match membership.role.as_str() {
-        "admin" => Some(fetch_bills_due_soon(&state, household_id, today).await?),
-        "member" => {
-            let member_access = sqlx::query_scalar::<_, String>(
-                r#"
-                SELECT member_access
-                FROM household_finance_settings
-                WHERE household_id = $1
-                "#,
-            )
-            .bind(household_id)
-            .fetch_optional(&state.db)
-            .await?;
+    let bills_due_soon = if state.config.db_backend == DbBackend::RustDb {
+        // Bills table does not exist in rustdb mode; finance is postgres-only.
+        None
+    } else {
+        match membership.role.as_str() {
+            "admin" => Some(fetch_bills_due_soon(&state, household_id, today).await?),
+            "member" => {
+                let member_access = sqlx::query_scalar::<_, String>(
+                    r#"
+                    SELECT member_access
+                    FROM household_finance_settings
+                    WHERE household_id = $1
+                    "#,
+                )
+                .bind(household_id)
+                .fetch_optional(&state.db)
+                .await?;
 
-            if matches!(member_access.as_deref(), Some("read_only" | "full")) {
-                Some(fetch_bills_due_soon(&state, household_id, today).await?)
-            } else {
-                None
+                if matches!(member_access.as_deref(), Some("read_only" | "full")) {
+                    Some(fetch_bills_due_soon(&state, household_id, today).await?)
+                } else {
+                    None
+                }
             }
+            _ => None,
         }
-        _ => None,
     };
 
     Ok(Json(DashboardResponse {

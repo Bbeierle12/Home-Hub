@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::{require_admin, require_household_access, CurrentUser},
+    compat,
     error::ApiError,
     types::HouseholdRole,
     AppState,
@@ -87,29 +88,44 @@ async fn create_household(
         ));
     }
 
-    let household = sqlx::query_as::<_, HouseholdRecord>(
+    let household_id = compat::new_id();
+    let now = compat::now_utc();
+
+    sqlx::query(
         r#"
-        INSERT INTO households (id, name, created_by)
-        VALUES ($1, $2, $3)
-        RETURNING id, name, created_by, created_at
+        INSERT INTO households (id, name, created_by, created_at)
+        VALUES ($1, $2, $3, $4)
         "#,
     )
-    .bind(Uuid::new_v4())
+    .bind(household_id)
     .bind(request.name.trim())
     .bind(current_user.user_id)
-    .fetch_one(&state.db)
+    .bind(now)
+    .execute(&state.db)
     .await?;
 
     sqlx::query(
         r#"
-        INSERT INTO household_members (id, household_id, user_id, role)
-        VALUES ($1, $2, $3, 'admin')
+        INSERT INTO household_members (id, household_id, user_id, role, joined_at)
+        VALUES ($1, $2, $3, 'admin', $4)
         "#,
     )
-    .bind(Uuid::new_v4())
-    .bind(household.id)
+    .bind(compat::new_id())
+    .bind(household_id)
     .bind(current_user.user_id)
+    .bind(now)
     .execute(&state.db)
+    .await?;
+
+    let household = sqlx::query_as::<_, HouseholdRecord>(
+        r#"
+        SELECT id, name, created_by, created_at
+        FROM households
+        WHERE id = $1
+        "#,
+    )
+    .bind(household_id)
+    .fetch_one(&state.db)
     .await?;
 
     Ok(Json(HouseholdResponse { household }))
@@ -137,28 +153,55 @@ async fn join_household(
         return Err(ApiError::bad_request("Invite token is expired or already used"));
     }
 
-    sqlx::query(
-        r#"
-        INSERT INTO household_members (id, household_id, user_id, role)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (household_id, user_id) DO NOTHING
-        "#,
+    // App-side existence check replaces ON CONFLICT DO NOTHING.
+    // If a concurrent request races past the check, the unique index on
+    // (household_id, user_id) causes a constraint/unique-violation error
+    // which we swallow — the member row already exists either way.
+    let already_member = sqlx::query(
+        "SELECT id FROM household_members WHERE household_id = $1 AND user_id = $2",
     )
-    .bind(Uuid::new_v4())
     .bind(invite.household_id)
     .bind(current_user.user_id)
-    .bind(invite.role)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await?;
+
+    if already_member.is_none() {
+        let insert = sqlx::query(
+            r#"
+            INSERT INTO household_members (id, household_id, user_id, role, joined_at)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(compat::new_id())
+        .bind(invite.household_id)
+        .bind(current_user.user_id)
+        .bind(&invite.role)
+        .bind(compat::now_utc())
+        .execute(&state.db)
+        .await;
+
+        if let Err(error) = insert {
+            // Swallow unique-violation (race condition) — member was created
+            // by a concurrent request.  Any other error is propagated.
+            if let sqlx::Error::Database(ref db_err) = error {
+                if !db_err.is_unique_violation() {
+                    return Err(ApiError::from(error));
+                }
+            } else {
+                return Err(ApiError::from(error));
+            }
+        }
+    }
 
     sqlx::query(
         r#"
         UPDATE household_invites
-        SET accepted_at = NOW()
+        SET accepted_at = $2
         WHERE token = $1
         "#,
     )
-    .bind(request.token)
+    .bind(&request.token)
+    .bind(compat::now_utc())
     .execute(&state.db)
     .await?;
 
@@ -212,16 +255,18 @@ async fn create_invite(
 
     sqlx::query(
         r#"
-        INSERT INTO household_invites (id, household_id, invited_by, token, role, email, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW() + INTERVAL '7 days')
+        INSERT INTO household_invites (id, household_id, invited_by, token, role, email, expires_at, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         "#,
     )
-    .bind(Uuid::new_v4())
+    .bind(compat::new_id())
     .bind(household_id)
     .bind(current_user.user_id)
     .bind(&invite_token)
     .bind(role)
     .bind(request.email)
+    .bind(compat::invite_expires_at())
+    .bind(compat::now_utc())
     .execute(&state.db)
     .await?;
 

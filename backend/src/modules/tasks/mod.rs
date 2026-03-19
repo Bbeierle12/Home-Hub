@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::{require_household_access, require_shared_write, CurrentUser},
+    compat,
     error::ApiError,
     AppState,
 };
@@ -135,30 +136,42 @@ async fn create_task(
 ) -> Result<Json<TaskResponse>, ApiError> {
     require_shared_write(&state, &current_user, household_id).await?;
 
-    let task = sqlx::query_as::<_, TaskRecord>(
+    let task_id = compat::new_id();
+    let now = compat::now_utc();
+    let priority = request.priority.unwrap_or_else(|| "medium".to_string());
+    if !matches!(priority.as_str(), "low" | "medium" | "high") {
+        return Err(ApiError::bad_request(
+            "Priority must be one of: low, medium, high",
+        ));
+    }
+    let points = request.points.unwrap_or(0);
+
+    sqlx::query(
         r#"
         INSERT INTO tasks (
             id, household_id, created_by, assigned_to, title, description, category, priority,
-            due_at, points, recurrence_rule
+            due_at, points, recurrence_rule, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'medium'), $9, COALESCE($10, 0), $11)
-        RETURNING id, household_id, created_by, assigned_to, title, description, category, priority,
-                  due_at, completed_at, points, recurrence_rule, recurrence_parent_id, created_at, updated_at
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         "#,
     )
-    .bind(Uuid::new_v4())
+    .bind(task_id)
     .bind(household_id)
     .bind(current_user.user_id)
     .bind(request.assigned_to)
     .bind(request.title.trim())
     .bind(request.description)
     .bind(request.category)
-    .bind(request.priority)
+    .bind(priority)
     .bind(request.due_at)
-    .bind(request.points)
+    .bind(points)
     .bind(request.recurrence_rule)
-    .fetch_one(&state.db)
+    .bind(now)
+    .bind(now)
+    .execute(&state.db)
     .await?;
+
+    let task = fetch_task_by_id(&state, task_id).await?;
 
     publish_task_event(&state, "task.created", household_id, current_user.user_id, &task).await?;
     Ok(Json(TaskResponse { task }))
@@ -172,7 +185,17 @@ async fn update_task(
 ) -> Result<Json<TaskResponse>, ApiError> {
     require_shared_write(&state, &current_user, household_id).await?;
 
-    let task = sqlx::query_as::<_, TaskRecord>(
+    if let Some(ref p) = request.priority {
+        if !matches!(p.as_str(), "low" | "medium" | "high") {
+            return Err(ApiError::bad_request(
+                "Priority must be one of: low, medium, high",
+            ));
+        }
+    }
+
+    let now = compat::now_utc();
+
+    let result = sqlx::query(
         r#"
         UPDATE tasks
         SET title = COALESCE($3, title),
@@ -183,10 +206,8 @@ async fn update_task(
             assigned_to = COALESCE($8, assigned_to),
             points = COALESCE($9, points),
             recurrence_rule = COALESCE($10, recurrence_rule),
-            updated_at = NOW()
+            updated_at = $11
         WHERE household_id = $1 AND id = $2
-        RETURNING id, household_id, created_by, assigned_to, title, description, category, priority,
-                  due_at, completed_at, points, recurrence_rule, recurrence_parent_id, created_at, updated_at
         "#,
     )
     .bind(household_id)
@@ -199,9 +220,15 @@ async fn update_task(
     .bind(request.assigned_to)
     .bind(request.points)
     .bind(request.recurrence_rule)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| ApiError::not_found("Task not found"))?;
+    .bind(now)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("Task not found"));
+    }
+
+    let task = fetch_task_by_id(&state, task_id).await?;
 
     publish_task_event(&state, "task.updated", household_id, current_user.user_id, &task).await?;
     Ok(Json(TaskResponse { task }))
@@ -214,30 +241,38 @@ async fn complete_task(
 ) -> Result<Json<TaskResponse>, ApiError> {
     require_household_access(&state, &current_user, household_id).await?;
 
-    let task = sqlx::query_as::<_, TaskRecord>(
+    let now = compat::now_utc();
+
+    let result = sqlx::query(
         r#"
         UPDATE tasks
-        SET completed_at = NOW(), updated_at = NOW()
+        SET completed_at = $3, updated_at = $4
         WHERE household_id = $1 AND id = $2
-        RETURNING id, household_id, created_by, assigned_to, title, description, category, priority,
-                  due_at, completed_at, points, recurrence_rule, recurrence_parent_id, created_at, updated_at
         "#,
     )
     .bind(household_id)
     .bind(task_id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| ApiError::not_found("Task not found"))?;
+    .bind(now)
+    .bind(now)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("Task not found"));
+    }
+
+    let task = fetch_task_by_id(&state, task_id).await?;
 
     sqlx::query(
         r#"
-        INSERT INTO task_completion_log (id, task_id, completed_by, points_awarded)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO task_completion_log (id, task_id, completed_by, completed_at, points_awarded)
+        VALUES ($1, $2, $3, $4, $5)
         "#,
     )
-    .bind(Uuid::new_v4())
+    .bind(compat::new_id())
     .bind(task_id)
     .bind(current_user.user_id)
+    .bind(now)
     .bind(task.points)
     .execute(&state.db)
     .await?;
@@ -254,21 +289,25 @@ async fn assign_task(
 ) -> Result<Json<TaskResponse>, ApiError> {
     require_shared_write(&state, &current_user, household_id).await?;
 
-    let task = sqlx::query_as::<_, TaskRecord>(
+    let result = sqlx::query(
         r#"
         UPDATE tasks
-        SET assigned_to = $3, updated_at = NOW()
+        SET assigned_to = $3, updated_at = $4
         WHERE household_id = $1 AND id = $2
-        RETURNING id, household_id, created_by, assigned_to, title, description, category, priority,
-                  due_at, completed_at, points, recurrence_rule, recurrence_parent_id, created_at, updated_at
         "#,
     )
     .bind(household_id)
     .bind(task_id)
     .bind(request.assigned_to)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| ApiError::not_found("Task not found"))?;
+    .bind(compat::now_utc())
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("Task not found"));
+    }
+
+    let task = fetch_task_by_id(&state, task_id).await?;
 
     publish_task_event(&state, "task.updated", household_id, current_user.user_id, &task).await?;
     Ok(Json(TaskResponse { task }))
@@ -313,6 +352,21 @@ async fn delete_task(
         .await?;
 
     Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
+async fn fetch_task_by_id(state: &Arc<AppState>, task_id: Uuid) -> Result<TaskRecord, ApiError> {
+    sqlx::query_as::<_, TaskRecord>(
+        r#"
+        SELECT id, household_id, created_by, assigned_to, title, description, category, priority,
+               due_at, completed_at, points, recurrence_rule, recurrence_parent_id, created_at, updated_at
+        FROM tasks
+        WHERE id = $1
+        "#,
+    )
+    .bind(task_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| ApiError::not_found("Task not found"))
 }
 
 async fn publish_task_event(
