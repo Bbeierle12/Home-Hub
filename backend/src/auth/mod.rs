@@ -70,6 +70,7 @@ struct AuthenticatedUser {
     household_id: Option<Uuid>,
     role: Option<HouseholdRole>,
     totp_enabled: bool,
+    is_superadmin: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,6 +93,7 @@ struct UserRecord {
     display_name: String,
     totp_secret: Option<String>,
     totp_enabled: bool,
+    is_superadmin: bool,
 }
 
 #[derive(Debug, FromRow)]
@@ -184,6 +186,7 @@ async fn register(
         household_id: None,
         role: None,
         totp_enabled: false,
+        is_superadmin: false,
     }))
 }
 
@@ -202,7 +205,7 @@ async fn login(
     let household_id = membership.as_ref().map(|membership| membership.household_id);
 
     if user.totp_enabled && matches!(role, Some(HouseholdRole::Admin | HouseholdRole::Member)) {
-        let temp_token = jwt::encode_two_factor_token(&state.config, user.id, household_id, role)?;
+        let temp_token = jwt::encode_two_factor_token(&state.config, user.id, household_id, role, user.is_superadmin)?;
         return Ok((
             jar,
             Json(serde_json::json!(LoginChallengeResponse {
@@ -423,7 +426,7 @@ async fn two_factor_regenerate_backup_codes(
 async fn find_user_by_email(state: &Arc<AppState>, email: &str) -> Result<UserRecord, ApiError> {
     sqlx::query_as::<_, UserRecord>(
         r#"
-        SELECT id, email, password_hash, display_name, totp_secret, totp_enabled
+        SELECT id, email, password_hash, display_name, totp_secret, totp_enabled, is_superadmin
         FROM users
         WHERE email = $1
         "#,
@@ -437,7 +440,7 @@ async fn find_user_by_email(state: &Arc<AppState>, email: &str) -> Result<UserRe
 async fn find_user_by_id(state: &Arc<AppState>, user_id: Uuid) -> Result<UserRecord, ApiError> {
     sqlx::query_as::<_, UserRecord>(
         r#"
-        SELECT id, email, password_hash, display_name, totp_secret, totp_enabled
+        SELECT id, email, password_hash, display_name, totp_secret, totp_enabled, is_superadmin
         FROM users
         WHERE id = $1
         "#,
@@ -474,10 +477,10 @@ async fn issue_tokens(
     household_id: Option<Uuid>,
     role: Option<HouseholdRole>,
 ) -> Result<(CookieJar, AuthResponse), ApiError> {
-    let access_token = jwt::encode_access_token(&state.config, user.id, household_id, role)?;
+    let access_token = jwt::encode_access_token(&state.config, user.id, household_id, role, user.is_superadmin)?;
     let session_id = Uuid::new_v4().to_string();
     let refresh_token =
-        jwt::encode_refresh_token(&state.config, user.id, household_id, role, session_id.clone())?;
+        jwt::encode_refresh_token(&state.config, user.id, household_id, role, user.is_superadmin, session_id.clone())?;
 
     let mut redis = state.redis.get_multiplexed_async_connection().await?;
     let cache_key = format!("refresh:{session_id}");
@@ -507,6 +510,7 @@ async fn issue_tokens(
                 household_id,
                 role,
                 totp_enabled: user.totp_enabled,
+                is_superadmin: user.is_superadmin,
             },
             tokens: TokenBundle {
                 access_token,

@@ -3,7 +3,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { AuthPage } from "../pages/auth/AuthPage";
 import { DashboardPage } from "../pages/dashboard/DashboardPage";
+import { CalendarPage } from "../pages/calendar/CalendarPage";
 import { FinancePage } from "../pages/finance/FinancePage";
+import { PantryPage } from "../pages/pantry/PantryPage";
 import { HouseholdPage } from "../pages/household/HouseholdPage";
 import { ShoppingPage } from "../pages/shopping/ShoppingPage";
 import { TasksPage } from "../pages/tasks/TasksPage";
@@ -39,7 +41,7 @@ export function App() {
     return <AuthPage />;
   }
 
-  if (!user.household_id) {
+  if (!user.household_id && !user.is_superadmin) {
     return <HouseholdPage />;
   }
 
@@ -50,6 +52,8 @@ export function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/shopping" element={<ShoppingPage />} />
+        <Route path="/pantry" element={<PantryPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/finance" element={<FinancePage />} />
       </Route>
     </Routes>

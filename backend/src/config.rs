@@ -32,6 +32,7 @@ pub struct AppConfig {
     pub device_trust_ttl_seconds: usize,
     pub totp_issuer: String,
     pub db_backend: DbBackend,
+    pub upload_dir: String,
 }
 
 impl AppConfig {
@@ -66,6 +67,7 @@ impl AppConfig {
                 .map_err(|_| ApiError::config("DEVICE_TRUST_TTL_SECONDS must be an integer"))?,
             totp_issuer: read_env("TOTP_ISSUER", "HouseholdDashboard"),
             db_backend,
+            upload_dir: read_env("UPLOAD_DIR", "./uploads"),
         }))
     }
 

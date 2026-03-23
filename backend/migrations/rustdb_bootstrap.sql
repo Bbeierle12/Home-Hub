@@ -24,6 +24,7 @@ CREATE TABLE users (
   avatar_url  TEXT,
   totp_secret TEXT,
   totp_enabled BOOLEAN NOT NULL,
+  is_superadmin BOOLEAN NOT NULL,
   created_at  TIMESTAMP NOT NULL,
   updated_at  TIMESTAMP NOT NULL
 );
@@ -126,6 +127,90 @@ CREATE TABLE shopping_item_history (
   buy_count      INT       NOT NULL
 );
 CREATE UNIQUE INDEX idx_sih_household_name ON shopping_item_history (household_id, name);
+
+CREATE TABLE pantry_categories (
+  id           UUID NOT NULL,
+  household_id UUID NOT NULL,
+  name         TEXT NOT NULL,
+  icon         TEXT,
+  sort_order   INT  NOT NULL,
+  created_at   TIMESTAMP NOT NULL
+);
+CREATE UNIQUE INDEX idx_pc_household_name ON pantry_categories (household_id, name);
+
+CREATE TABLE pantry_items (
+  id            UUID NOT NULL,
+  household_id  UUID NOT NULL,
+  category_id   UUID,
+  added_by      UUID NOT NULL,
+  name          TEXT NOT NULL,
+  quantity      DOUBLE PRECISION NOT NULL,
+  unit          TEXT,
+  expires_at    TIMESTAMP,
+  low_threshold DOUBLE PRECISION,
+  notes         TEXT,
+  created_at    TIMESTAMP NOT NULL,
+  updated_at    TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_pantry_items_household ON pantry_items (household_id);
+CREATE INDEX idx_pantry_items_category ON pantry_items (category_id);
+
+CREATE TABLE calendar_events (
+  id               UUID NOT NULL,
+  household_id     UUID NOT NULL,
+  created_by       UUID NOT NULL,
+  title            TEXT NOT NULL,
+  description      TEXT,
+  location         TEXT,
+  start_at         TIMESTAMP NOT NULL,
+  end_at           TIMESTAMP NOT NULL,
+  all_day          BOOLEAN NOT NULL,
+  color            TEXT NOT NULL,
+  event_type       TEXT NOT NULL,
+  recurrence_rule  TEXT,
+  recurrence_end_at TIMESTAMP,
+  created_at       TIMESTAMP NOT NULL,
+  updated_at       TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_cal_events_household_range ON calendar_events (household_id, start_at, end_at);
+
+CREATE TABLE meal_plans (
+  id                UUID NOT NULL,
+  household_id      UUID NOT NULL,
+  calendar_event_id UUID,
+  created_by        UUID NOT NULL,
+  date              DATE NOT NULL,
+  meal_type         TEXT NOT NULL,
+  recipe_name       TEXT NOT NULL,
+  recipe_url        TEXT,
+  servings          INT NOT NULL,
+  prep_minutes      INT,
+  notes             TEXT,
+  created_at        TIMESTAMP NOT NULL,
+  updated_at        TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_meal_plans_household_date ON meal_plans (household_id, date);
+
+CREATE TABLE meal_plan_items (
+  id              UUID NOT NULL,
+  meal_plan_id    UUID NOT NULL,
+  pantry_item_id  UUID,
+  ingredient_name TEXT NOT NULL,
+  quantity        DOUBLE PRECISION,
+  unit            TEXT
+);
+CREATE INDEX idx_meal_plan_items_meal ON meal_plan_items (meal_plan_id);
+
+CREATE TABLE pantry_item_photos (
+  id           UUID NOT NULL,
+  item_id      UUID NOT NULL,
+  household_id UUID NOT NULL,
+  uploaded_by  UUID NOT NULL,
+  file_name    TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  created_at   TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_pantry_photos_item ON pantry_item_photos (item_id);
 
 CREATE TABLE notifications (
   id           UUID NOT NULL,

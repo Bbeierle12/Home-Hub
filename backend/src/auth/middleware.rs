@@ -21,6 +21,7 @@ pub struct CurrentUser {
     pub user_id: Uuid,
     pub household_id: Option<Uuid>,
     pub role: Option<HouseholdRole>,
+    pub is_superadmin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -64,6 +65,7 @@ where
                 user_id: claims.sub,
                 household_id: claims.household_id,
                 role: claims.role,
+                is_superadmin: claims.is_superadmin,
             })
         })();
 
@@ -76,6 +78,14 @@ pub async fn require_household_access(
     current_user: &CurrentUser,
     household_id: Uuid,
 ) -> Result<MembershipRecord, ApiError> {
+    if current_user.is_superadmin {
+        return Ok(MembershipRecord {
+            user_id: current_user.user_id,
+            household_id,
+            role: "admin".to_owned(),
+        });
+    }
+
     let membership = sqlx::query_as::<_, MembershipRecord>(
         r#"
         SELECT user_id, household_id, role

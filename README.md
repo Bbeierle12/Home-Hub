@@ -32,6 +32,7 @@ Prerequisites: Rust 1.93+, Node.js 24+, PostgreSQL, Redis
    ```
    psql -f backend/migrations/0001_mvp.sql $DATABASE_URL
    psql -f backend/migrations/0002_finance.sql $DATABASE_URL
+   psql -f backend/migrations/0003_superadmin.sql $DATABASE_URL
    ```
 3. Start the backend:
    `cargo run --manifest-path backend/Cargo.toml`
@@ -81,6 +82,8 @@ Prerequisites: Rust 1.93+, Node.js 24+, [Rust-DB](../Rust%20DB/Rust-DB) (with `-
 | `JWT_REFRESH_EXPIRY_SECONDS` | No | `604800` | Refresh token TTL |
 | `TOTP_ISSUER` | No | `HouseholdDashboard` | TOTP provisioning issuer name |
 | `DEVICE_TRUST_TTL_SECONDS` | No | `2592000` | Trusted-device TTL |
+| `SUPERADMIN_EMAIL` | No | — | Bootstrap a superadmin account on startup |
+| `SUPERADMIN_PASSWORD` | No | — | Password for the superadmin account (min 12 chars) |
 
 ## Validation
 

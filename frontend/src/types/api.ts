@@ -8,6 +8,7 @@ export type AuthenticatedUser = {
   household_id: string | null;
   role: HouseholdRole | null;
   totp_enabled: boolean;
+  is_superadmin: boolean;
 };
 
 export type TokenBundle = {
@@ -164,9 +165,87 @@ export type ShoppingItem = {
   created_at: string;
 };
 
+export type PantryCategory = {
+  id: string;
+  household_id: string;
+  name: string;
+  icon: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type PantryItem = {
+  id: string;
+  household_id: string;
+  category_id: string | null;
+  added_by: string;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  expires_at: string | null;
+  low_threshold: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CalendarEvent = {
+  id: string;
+  household_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  start_at: string;
+  end_at: string;
+  all_day: boolean;
+  color: string;
+  event_type: "event" | "task" | "reminder" | "meal";
+  recurrence_rule: string | null;
+  recurrence_end_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MealPlan = {
+  id: string;
+  household_id: string;
+  calendar_event_id: string | null;
+  created_by: string;
+  date: string;
+  meal_type: "breakfast" | "lunch" | "dinner" | "snack";
+  recipe_name: string;
+  recipe_url: string | null;
+  servings: number;
+  prep_minutes: number | null;
+  notes: string | null;
+  ingredients: MealPlanItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type MealPlanItem = {
+  id: string;
+  meal_plan_id: string;
+  pantry_item_id: string | null;
+  ingredient_name: string;
+  quantity: number | null;
+  unit: string | null;
+};
+
+export type PantryPhoto = {
+  id: string;
+  item_id: string;
+  household_id: string;
+  uploaded_by: string;
+  file_name: string;
+  content_type: string;
+  created_at: string;
+};
+
 export type WsEnvelope = {
   type: string;
-  module: "tasks" | "shopping" | "notifications";
+  module: "tasks" | "shopping" | "pantry" | "calendar" | "notifications";
   household_id: string;
   actor_user_id: string;
   payload: unknown;

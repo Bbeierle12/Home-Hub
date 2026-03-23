@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Home, Landmark, ListChecks, LogOut, ShoppingBasket } from "lucide-react";
+import { Calendar, Home, Landmark, ListChecks, LogOut, Package, ShoppingBasket } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../stores/auth";
 import { useCapabilitiesStore } from "../stores/capabilities";
@@ -8,6 +8,8 @@ const navigation = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/shopping", label: "Shopping", icon: ShoppingBasket },
+  { to: "/pantry", label: "Pantry", icon: Package },
+  { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/finance", label: "Finance", icon: Landmark },
 ];
 
@@ -24,7 +26,7 @@ export function AppShell() {
   const visibleNavigation = navigation.filter((item) => {
     if (item.to === "/finance") {
       if (!financeEnabled) return false;
-      return user?.role === "admin" || user?.role === "member";
+      return user?.is_superadmin || user?.role === "admin" || user?.role === "member";
     }
     return true;
   });
@@ -42,7 +44,7 @@ export function AppShell() {
           <div className="mt-6 rounded-3xl bg-[color:var(--color-accent-soft)]/70 p-4">
             <p className="text-sm font-medium text-[color:var(--color-muted)]">Signed in as</p>
             <p className="mt-1 text-lg font-bold">{user?.display_name}</p>
-            <p className="text-sm capitalize text-[color:var(--color-muted)]">{user?.role ?? "no role yet"}</p>
+            <p className="text-sm capitalize text-[color:var(--color-muted)]">{user?.is_superadmin ? "superadmin" : (user?.role ?? "no role yet")}</p>
           </div>
 
           <nav className="mt-8 space-y-2">

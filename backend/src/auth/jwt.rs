@@ -10,6 +10,8 @@ pub struct Claims {
     pub sub: Uuid,
     pub household_id: Option<Uuid>,
     pub role: Option<HouseholdRole>,
+    #[serde(default)]
+    pub is_superadmin: bool,
     pub exp: usize,
     pub token_kind: TokenKind,
     pub jti: Option<String>,
@@ -28,6 +30,7 @@ pub fn encode_access_token(
     user_id: Uuid,
     household_id: Option<Uuid>,
     role: Option<HouseholdRole>,
+    is_superadmin: bool,
 ) -> Result<String, ApiError> {
     encode(
         &config.jwt_secret,
@@ -35,6 +38,7 @@ pub fn encode_access_token(
             sub: user_id,
             household_id,
             role,
+            is_superadmin,
             exp: (Utc::now() + config.access_expiry()).timestamp() as usize,
             token_kind: TokenKind::Access,
             jti: None,
@@ -47,6 +51,7 @@ pub fn encode_refresh_token(
     user_id: Uuid,
     household_id: Option<Uuid>,
     role: Option<HouseholdRole>,
+    is_superadmin: bool,
     session_id: String,
 ) -> Result<String, ApiError> {
     encode(
@@ -55,6 +60,7 @@ pub fn encode_refresh_token(
             sub: user_id,
             household_id,
             role,
+            is_superadmin,
             exp: (Utc::now() + config.refresh_expiry()).timestamp() as usize,
             token_kind: TokenKind::Refresh,
             jti: Some(session_id),
@@ -67,6 +73,7 @@ pub fn encode_two_factor_token(
     user_id: Uuid,
     household_id: Option<Uuid>,
     role: Option<HouseholdRole>,
+    is_superadmin: bool,
 ) -> Result<String, ApiError> {
     encode(
         &config.jwt_secret,
@@ -74,6 +81,7 @@ pub fn encode_two_factor_token(
             sub: user_id,
             household_id,
             role,
+            is_superadmin,
             exp: (Utc::now() + chrono::Duration::minutes(10)).timestamp() as usize,
             token_kind: TokenKind::TwoFactorPending,
             jti: None,
