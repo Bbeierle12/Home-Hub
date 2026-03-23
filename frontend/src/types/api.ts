@@ -243,9 +243,82 @@ export type PantryPhoto = {
   created_at: string;
 };
 
+// ── Kindred Canvas (Family Heritage) ────────────────────────────────────────
+
+export type FamilyMember = {
+  id: string;
+  household_id: string;
+  created_by: string;
+  linked_user_id: string | null;
+  first_name: string;
+  last_name: string | null;
+  maiden_name: string | null;
+  nickname: string | null;
+  gender: string | null;
+  birth_date: string | null;
+  birth_place: string | null;
+  death_date: string | null;
+  death_place: string | null;
+  bio: string | null;
+  avatar_file: string | null;
+  is_living: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FamilyRelationship = {
+  id: string;
+  household_id: string;
+  from_member_id: string;
+  to_member_id: string;
+  rel_type: "parent" | "child" | "spouse" | "sibling" | "partner";
+  start_date: string | null;
+  end_date: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type FamilyMediaAlbum = {
+  id: string;
+  household_id: string;
+  created_by: string;
+  name: string;
+  description: string | null;
+  cover_media_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FamilyMedia = {
+  id: string;
+  household_id: string;
+  album_id: string | null;
+  uploaded_by: string;
+  file_name: string;
+  content_type: string;
+  file_size_bytes: number | null;
+  caption: string | null;
+  taken_at: string | null;
+  location: string | null;
+  ai_people_tags: string | null;
+  ai_place_tags: string | null;
+  ai_event_tags: string | null;
+  ai_processed: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AiTagSuggestion = {
+  people: string[];
+  places: string[];
+  events: string[];
+  status: string;
+};
+
 export type WsEnvelope = {
   type: string;
-  module: "tasks" | "shopping" | "pantry" | "calendar" | "notifications";
+  module: "tasks" | "shopping" | "pantry" | "calendar" | "notifications" | "kindred";
   household_id: string;
   actor_user_id: string;
   payload: unknown;

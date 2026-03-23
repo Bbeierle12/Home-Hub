@@ -2,6 +2,7 @@ pub mod calendar;
 pub mod dashboard;
 pub mod finance;
 pub mod households;
+pub mod kindred;
 pub mod notifications;
 pub mod pantry;
 pub mod shopping;
@@ -19,7 +20,8 @@ pub fn router(db_backend: DbBackend) -> Router<std::sync::Arc<crate::AppState>> 
         .merge(dashboard::router())
         .merge(notifications::router())
         .merge(pantry::router())
-        .merge(calendar::router());
+        .merge(calendar::router())
+        .merge(kindred::router());
 
     match db_backend {
         DbBackend::Postgres => base.merge(finance::router()),

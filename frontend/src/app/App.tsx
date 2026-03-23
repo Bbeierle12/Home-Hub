@@ -9,6 +9,7 @@ import { PantryPage } from "../pages/pantry/PantryPage";
 import { HouseholdPage } from "../pages/household/HouseholdPage";
 import { ShoppingPage } from "../pages/shopping/ShoppingPage";
 import { TasksPage } from "../pages/tasks/TasksPage";
+import { KindredPage } from "../pages/kindred/KindredPage";
 import { useAuthStore } from "../stores/auth";
 import { householdWsClient } from "../ws/client";
 import { handleWsMessage } from "../ws/handlers";
@@ -55,6 +56,7 @@ export function App() {
         <Route path="/pantry" element={<PantryPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/finance" element={<FinancePage />} />
+        <Route path="/kindred" element={<KindredPage />} />
       </Route>
     </Routes>
   );

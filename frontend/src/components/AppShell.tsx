@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Calendar, Home, Landmark, ListChecks, LogOut, Package, ShoppingBasket } from "lucide-react";
+import { Calendar, Home, Landmark, ListChecks, LogOut, Package, ShoppingBasket, TreePine } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../stores/auth";
 import { useCapabilitiesStore } from "../stores/capabilities";
@@ -10,6 +10,7 @@ const navigation = [
   { to: "/shopping", label: "Shopping", icon: ShoppingBasket },
   { to: "/pantry", label: "Pantry", icon: Package },
   { to: "/calendar", label: "Calendar", icon: Calendar },
+  { to: "/kindred", label: "Kindred Canvas", icon: TreePine },
   { to: "/finance", label: "Finance", icon: Landmark },
 ];
 
