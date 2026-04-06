@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Camera, Package, Plus, Tag, Trash2, X } from "lucide-react";
+import { ScanButton } from "../../components/ScanButton";
+import { parsePantryItem } from "../../utils/ocr-parsers";
 import { useAuthStore } from "../../stores/auth";
 import { usePantryStore } from "../../stores/pantry";
 import type { PantryItem } from "../../types/api";
@@ -151,6 +153,17 @@ export function PantryPage() {
             <div className="flex items-center gap-2">
               <Package className="size-5 text-[color:var(--color-accent)]" />
               <h2 className="text-lg font-bold">Add Item</h2>
+              <div className="ml-auto">
+                <ScanButton
+                  parser={parsePantryItem}
+                  onResult={(fields) => {
+                    if (fields.name) setNewItemName(fields.name);
+                    if (fields.qty) setNewItemQty(fields.qty);
+                    if (fields.unit) setNewItemUnit(fields.unit);
+                    if (fields.expires) setNewItemExpires(fields.expires);
+                  }}
+                />
+              </div>
             </div>
             <div className="mt-4 space-y-3">
               <input

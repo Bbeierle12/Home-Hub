@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Heart, Plus, Trash2, UserPlus, Users } from "lucide-react";
+import { ScanButton } from "../../../components/ScanButton";
+import { parsePeopleMember } from "../../../utils/ocr-parsers";
 import { useAuthStore } from "../../../stores/auth";
 import { useKindredStore } from "../../../stores/kindred";
 import type { FamilyMember } from "../../../types/api";
@@ -95,6 +97,18 @@ export function PeopleTab() {
           <div className="flex items-center gap-2">
             <UserPlus className="size-5 text-[color:var(--color-accent)]" />
             <h2 className="text-lg font-bold">Add Family Member</h2>
+            <div className="ml-auto">
+              <ScanButton
+                parser={parsePeopleMember}
+                onResult={(fields) => {
+                  if (fields.firstName) setFirstName(fields.firstName);
+                  if (fields.lastName) setLastName(fields.lastName);
+                  if (fields.birthDate) setBirthDate(fields.birthDate);
+                  if (fields.birthPlace) setBirthPlace(fields.birthPlace);
+                  if (fields.gender) setGender(fields.gender);
+                }}
+              />
+            </div>
           </div>
           <div className="mt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">

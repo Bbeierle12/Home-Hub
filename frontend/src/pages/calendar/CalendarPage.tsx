@@ -10,6 +10,8 @@ import {
   UtensilsCrossed,
   X,
 } from "lucide-react";
+import { ScanButton } from "../../components/ScanButton";
+import { parseCalendarEvent, parseCalendarMeal } from "../../utils/ocr-parsers";
 import { useAuthStore } from "../../stores/auth";
 import { useCalendarStore } from "../../stores/calendar";
 import type { CalendarEvent, MealPlan } from "../../types/api";
@@ -193,6 +195,9 @@ export function CalendarPage() {
       {showEventModal && (
         <Modal onClose={() => setShowEventModal(false)} title="New Event">
           <div className="space-y-3">
+            <div className="flex justify-end -mt-1 mb-1">
+              <ScanButton parser={parseCalendarEvent} onResult={(fields) => setEventForm((prev) => ({ ...prev, ...fields }))} />
+            </div>
             <input value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} placeholder="Event title" className="w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 outline-none" />
             <textarea value={eventForm.description} onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })} placeholder="Description (optional)" rows={2} className="w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 outline-none" />
             <input value={eventForm.location} onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })} placeholder="Location (optional)" className="w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 outline-none" />
@@ -218,6 +223,9 @@ export function CalendarPage() {
       {showMealModal && (
         <Modal onClose={() => setShowMealModal(false)} title={`Plan Meal — ${current.toLocaleDateString()}`}>
           <div className="space-y-3">
+            <div className="flex justify-end -mt-1 mb-1">
+              <ScanButton parser={parseCalendarMeal} onResult={(fields) => setMealForm((prev) => ({ ...prev, ...fields }))} />
+            </div>
             <input value={mealForm.recipe_name} onChange={(e) => setMealForm({ ...mealForm, recipe_name: e.target.value })} placeholder="Recipe / Meal name" className="w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 outline-none" />
             <div className="grid grid-cols-3 gap-3">
               <select value={mealForm.meal_type} onChange={(e) => setMealForm({ ...mealForm, meal_type: e.target.value })} className="rounded-2xl border border-[color:var(--color-border)] bg-white px-3 py-3 text-sm outline-none">

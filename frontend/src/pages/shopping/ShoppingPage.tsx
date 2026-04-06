@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, Plus, ShoppingBag } from "lucide-react";
 import { Panel } from "../../components/Panel";
+import { ScanButton } from "../../components/ScanButton";
+import { parseShoppingItems } from "../../utils/ocr-parsers";
 import { useAuthStore } from "../../stores/auth";
 import { useShoppingStore } from "../../stores/shopping";
 
@@ -89,6 +91,17 @@ export function ShoppingPage() {
               >
                 <Plus className="size-4" />
               </button>
+              <ScanButton
+                compact
+                parser={parseShoppingItems}
+                onResult={({ items: scannedItems }) => {
+                  if (householdId && activeList?.id && scannedItems?.length) {
+                    for (const name of scannedItems) {
+                      void addItem(householdId, activeList.id, name);
+                    }
+                  }
+                }}
+              />
             </div>
 
             <div className="mt-6 space-y-3">

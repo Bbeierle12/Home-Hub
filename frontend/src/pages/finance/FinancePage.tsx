@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, BadgeDollarSign, Landmark, ReceiptText } from "lucide-react";
 import { Panel } from "../../components/Panel";
+import { ScanButton } from "../../components/ScanButton";
+import { parseFinanceBill, parseFinanceCategory } from "../../utils/ocr-parsers";
 import { useAuthStore } from "../../stores/auth";
 import { useFinanceStore } from "../../stores/finance";
 import { formatCurrency } from "../../utils/currency";
@@ -125,6 +127,9 @@ export function FinancePage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Panel title="Bills" eyebrow="Track">
+          <div className="mb-3 flex justify-end">
+            <ScanButton parser={parseFinanceBill} onResult={(fields) => setBillForm((prev) => ({ ...prev, ...fields }))} />
+          </div>
           <div className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto]">
             <input
               value={billForm.name}
@@ -193,6 +198,9 @@ export function FinancePage() {
 
         <div className="space-y-6">
           <Panel title="Budget Categories" eyebrow="Plan">
+            <div className="mb-3 flex justify-end">
+              <ScanButton compact parser={parseFinanceCategory} onResult={(fields) => setCategoryForm((prev) => ({ ...prev, ...fields }))} />
+            </div>
             <div className="flex gap-3">
               <input
                 value={categoryForm.name}

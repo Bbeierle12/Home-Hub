@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { CheckCheck, Plus } from "lucide-react";
 import { Panel } from "../../components/Panel";
+import { ScanButton } from "../../components/ScanButton";
+import { parseTaskTitle } from "../../utils/ocr-parsers";
 import { useAuthStore } from "../../stores/auth";
 import { useTasksStore } from "../../stores/tasks";
 
@@ -21,14 +23,17 @@ export function TasksPage() {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
       <Panel title="Add Task" eyebrow="Create">
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium">Title</span>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className="w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 outline-none focus:border-[color:var(--color-accent)]"
-          />
-        </label>
+        <div className="flex items-end gap-2">
+          <label className="block flex-1">
+            <span className="mb-2 block text-sm font-medium">Title</span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 outline-none focus:border-[color:var(--color-accent)]"
+            />
+          </label>
+          <ScanButton compact parser={parseTaskTitle} onResult={({ title: t }) => { if (t) setTitle(t); }} />
+        </div>
         <button
           type="button"
           onClick={() => {
